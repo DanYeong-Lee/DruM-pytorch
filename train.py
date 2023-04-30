@@ -30,6 +30,32 @@ def train(model, sde, optimizer, ema, dataloader, device):
     return epoch_loss / len(dataloader)
 
 
+def validation(model, sde, ema, train_data_dist, n_samples, device):
+    model.eval()
+    with ema.average_parameters():
+        model.eval()
+        n_atoms = torch.multinomial(train_data_dist, n_samples, replacement=True)
+        Xs, Es = sde.predictor_corrector_sample(model, device, n_atoms=n_atoms, n_steps=1000, n_lang_steps=1)
+
+    valid_count = 0.
+    imgs = []
+    for i in range(len(Xs)):
+        x, e = drop_masked(Xs[i], Es[i])
+        mol = data_to_mol(x, e)
+
+        try:
+            SanitizeMol(mol)
+            pil = valid_mol_to_pil(mol)
+            valid_count += 1
+        except:
+            pil = mol_to_pil(mol)
+
+        imgs.append(wandb.Image(pil))
+
+    valid_ratio = valid_count / n_samples
+
+    return valid_ratio, imgs
+
 
 def main():
     wandb.init(project='drum', name='drum-qm9-test')
@@ -58,44 +84,33 @@ def main():
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-12)
     ema = ExponentialMovingAverage(model.parameters(), decay=0.999)
 
-
+    n_epochs = 500
     n_samples = 100
+    validation_interval = 50
+
     if os.path.exists('data/qm9_train_dist.pt'):
         train_data_dist = torch.load('data/qm9_train_dist.pt')
     else:
         train_data_dist = get_n_atom_distribution(dataset)
         torch.save(train_data_dist, 'data/qm9_train_dist.pt')
 
-    for epoch in range(100):
+    for epoch in range(n_epochs):
         train_loss = train(model, sde, optimizer, ema, dataloader, device)
-        with ema.average_parameters():
-            model.eval()
-            n_atoms = torch.multinomial(train_data_dist, n_samples, replacement=True)
-            Xs, Es = sde.predictor_corrector_sample(model, device, n_atoms=n_atoms, n_steps=1000, n_lang_steps=1)
-
-        valid_count = 0
-        imgs = []
-        for i in range(len(Xs)):
-            x, e = drop_masked(Xs[i], Es[i])
-            mol = data_to_mol(x, e)
-
-            try:
-                SanitizeMol(mol)
-                pil = valid_mol_to_pil(mol)
-                valid_count += 1
-            except:
-                pil = mol_to_pil(mol)
-
-            imgs.append(wandb.Image(pil))
         
-        wandb.log({
-            'train_loss': train_loss,
-            'valid_ratio': valid_count / n_samples, 
-            'samples': imgs
-            })
+        if epoch % validation_interval == 0:
+            valid_ratio, imgs = validation(model, sde, ema, train_data_dist, n_samples, device)
+            wandb.log({
+                'train_loss': train_loss,
+                'valid_ratio': valid_ratio, 
+                'samples': imgs
+                })
+        else:
+            wandb.log({
+                'train_loss': train_loss,
+                })
 
     with ema.average_parameters():
-        torch.save(model.state_dict(), 'ckpts/qm9_test_100epochs.pt')
+        torch.save(model.state_dict(), 'ckpts/qm9_test_500epochs.pt')
 
 
 if __name__ == '__main__':
