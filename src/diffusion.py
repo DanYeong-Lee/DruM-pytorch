@@ -7,7 +7,7 @@ from src.utils import to_edge_mask
 
 
 
-class SDE(nn.Module):
+class DruM_SDE(nn.Module):
     def __init__(self, sigma_0=0.6, sigma_1=0.2, alpha=-0.5, lamb=5., eps=2e-3, loss_type='weighted'):
         super().__init__()
         self.sigma_0 = sigma_0

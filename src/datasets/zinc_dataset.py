@@ -52,9 +52,5 @@ class ZINCDataset(Dataset):
         row = self.df.iloc[idx]
         data = from_smiles(row['smiles'])
         data.adj = data.adj / 3
-        data.aromatic_rings = torch.tensor(row['aromatic_rings'], dtype=torch.long)
-        data.aliphatic_rings = torch.tensor(row['aliphatic_rings'], dtype=torch.long)
-        data.hb_donors = torch.tensor(row['hb_donor_count'], dtype=torch.long)
-        data.hb_acceptors = torch.tensor(row['hb_acceptor_count'], dtype=torch.long)
 
         return data

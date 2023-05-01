@@ -2,6 +2,11 @@ import torch
 import torch.nn as nn
 
 
+"""
+From official repo of DiGress (https://github.com/cvignac/DiGress)
+"""
+
+
 class Xtoy(nn.Module):
     def __init__(self, dx, dy):
         """ Map node features to global features """

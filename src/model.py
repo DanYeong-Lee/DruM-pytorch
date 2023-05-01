@@ -12,6 +12,12 @@ from src.utils import assert_correctly_masked, PlaceHolder
 from src.layers import Xtoy, Etoy, masked_softmax
 
 
+"""
+From official repo of DiGress (https://github.com/cvignac/DiGress)
+"""
+
+
+
 class XEyTransformerLayer(nn.Module):
     """ Transformer that updates node, edge and global features
         d_x: node features

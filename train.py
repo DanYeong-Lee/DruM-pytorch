@@ -1,17 +1,17 @@
+
 from tqdm import tqdm
 import pandas as pd
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-
-from src.datasets.qm9_dataset import QM9Dataset
 from src.data_utils import collate_fn, drop_masked, data_to_mol, mol_to_pil, valid_mol_to_pil, get_n_atom_distribution
 from src.model import GraphTransformer
-from src.diffusion import SDE
+from src.diffusion import DruM_SDE
 
 from torch_ema import ExponentialMovingAverage
 
 import os
+import os.path as osp
 import wandb
 from rdkit.Chem.rdmolops import SanitizeMol
 
@@ -57,19 +57,32 @@ def validation(model, sde, ema, train_data_dist, n_samples, device):
     return valid_ratio, imgs
 
 
-def main():
-    wandb.init(project='drum', name='drum-qm9-test')
-    df = pd.read_csv('../../data/qm9.csv')
-    dataset = QM9Dataset(df['smiles'].tolist())
-    dataloader = DataLoader(dataset, batch_size=256, shuffle=True, collate_fn=collate_fn, num_workers=4, drop_last=True)
+def main(args):
+    name = f'DruM_{args.dataset}_layers{args.n_layers}_bsz{args.bsz}_epochs{args.epochs}'
+    wandb.init(project='drum', name=name, config=args)
 
-    device = torch.device('cuda:1')
+    if args.dataset == 'qm9':
+        from src.datasets.qm9_dataset import QM9Dataset
+        df = pd.read_csv('data/qm9.csv')
+        dataset = QM9Dataset(df['smiles'].tolist())
+    elif args.dataset == 'zinc':
+        from src.datasets.zinc_dataset import ZINCDataset
+        df = pd.read_csv('data/zinc_250k.csv')
+        dataset = ZINCDataset(df)
+    else:
+        raise NotImplementedError
 
-    n_layers = 6
-    input_dims = {'X': 4, 'E': 1, 'y': 1}
+    dataloader = DataLoader(dataset, batch_size=args.bsz, shuffle=True, collate_fn=collate_fn, num_workers=4, drop_last=True)
+
+    device = torch.device(args.device)
+
+    n_layers = args.n_layers
+    x_dim = 4 if args.dataset == 'qm9' else 9
+
+    input_dims = {'X': x_dim, 'E': 1, 'y': 1}
     hidden_mlp_dims = {'X': 256, 'E': 128, 'y': 128}
     hidden_dims = {'dx': 256, 'de': 64, 'dy': 64, 'n_head': 8, 'dim_ffX': 256, 'dim_ffE': 128, 'dim_ffy': 128}
-    output_dims = {'X': 4, 'E': 1, 'y': 1}
+    output_dims = {'X': x_dim, 'E': 1, 'y': 1}
 
     model = GraphTransformer(
             n_layers=n_layers,
@@ -80,19 +93,19 @@ def main():
             act_fn_in=nn.ReLU(),
             act_fn_out=nn.ReLU(),
         ).to(device)
-    sde = SDE().to(device)
+    sde = DruM_SDE().to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-12)
     ema = ExponentialMovingAverage(model.parameters(), decay=0.999)
 
-    n_epochs = 500
+    n_epochs = args.epochs
     n_samples = 100
     validation_interval = 50
 
-    if os.path.exists('data/qm9_train_dist.pt'):
-        train_data_dist = torch.load('data/qm9_train_dist.pt')
+    if osp.exists(f'data/{args.dataset}_train_dist.pt'):
+        train_data_dist = torch.load(f'data/{args.dataset}_train_dist.pt')
     else:
         train_data_dist = get_n_atom_distribution(dataset)
-        torch.save(train_data_dist, 'data/qm9_train_dist.pt')
+        torch.save(train_data_dist, f'data/{args.dataset}_train_dist.pt')
 
     for epoch in range(n_epochs):
         train_loss = train(model, sde, optimizer, ema, dataloader, device)
@@ -109,9 +122,17 @@ def main():
                 'train_loss': train_loss,
                 })
 
+    os.makedirs('ckpts', exist_ok=True)
     with ema.average_parameters():
-        torch.save(model.state_dict(), 'ckpts/qm9_test_500epochs.pt')
-
+        torch.save(model.state_dict(), f'ckpts/{name}.pt')
 
 if __name__ == '__main__':
-    main()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--epochs', type=int, default=500)
+    parser.add_argument('--bsz', type=int, default=256)
+    parser.add_argument('--n_layers', type=int, default=6)
+    parser.add_argument('--dataset', type=str, default='qm9')
+    parser.add_argument('--device', type=str, default='cuda:1')
+    args = parser.parse_args()
+    main(args)
