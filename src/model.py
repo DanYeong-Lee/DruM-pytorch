@@ -227,6 +227,7 @@ class GraphTransformer(nn.Module):
                  output_dims: dict, act_fn_in: nn.ReLU(), act_fn_out: nn.ReLU()):
         super().__init__()
         self.n_layers = n_layers
+        self.input_dim_E = input_dims['E']
         self.out_dim_X = output_dims['X']
         self.out_dim_E = output_dims['E']
         self.out_dim_y = output_dims['y']
@@ -263,6 +264,13 @@ class GraphTransformer(nn.Module):
         diag_mask = torch.eye(n)
         diag_mask = ~diag_mask.type_as(E).bool()
         diag_mask = diag_mask.unsqueeze(0).unsqueeze(-1).expand(bs, -1, -1, -1)
+
+        # get higher-order E
+        Es = [E]
+        for _ in range(self.input_dim_E - 1):
+            E = E @ E
+            Es.append(E)
+        E = torch.stack(Es, dim=-1)
 
         X_to_out = X[..., :self.out_dim_X]
         E_to_out = E[..., :self.out_dim_E]

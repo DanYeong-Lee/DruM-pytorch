@@ -58,7 +58,7 @@ def validation(model, sde, ema, train_data_dist, n_samples, device):
 
 
 def main(args):
-    name = f'DruM_{args.dataset}_layers{args.n_layers}_bsz{args.bsz}_epochs{args.epochs}'
+    name = f'DruM_{args.dataset}_layers{args.n_layers}_adj-orders{args.n_orders}_bsz{args.bsz}_epochs{args.epochs}'
     wandb.init(project='drum', name=name, config=args)
 
     if args.dataset == 'qm9':
@@ -79,7 +79,7 @@ def main(args):
     n_layers = args.n_layers
     x_dim = 4 if args.dataset == 'qm9' else 9
 
-    input_dims = {'X': x_dim, 'E': 1, 'y': 1}
+    input_dims = {'X': x_dim, 'E': args.n_orders, 'y': 1}
     hidden_mlp_dims = {'X': 256, 'E': 128, 'y': 128}
     hidden_dims = {'dx': 256, 'de': 64, 'dy': 64, 'n_head': 8, 'dim_ffX': 256, 'dim_ffE': 128, 'dim_ffy': 128}
     output_dims = {'X': x_dim, 'E': 1, 'y': 1}
@@ -132,6 +132,7 @@ if __name__ == '__main__':
     parser.add_argument('--epochs', type=int, default=500)
     parser.add_argument('--bsz', type=int, default=256)
     parser.add_argument('--n_layers', type=int, default=6)
+    parser.add_argument('--n_orders', type=int, default=1)
     parser.add_argument('--dataset', type=str, default='qm9')
     parser.add_argument('--device', type=str, default='cuda:1')
     args = parser.parse_args()

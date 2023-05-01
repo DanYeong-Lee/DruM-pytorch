@@ -40,7 +40,7 @@ class DruM_SDE(nn.Module):
         return (1 - u ** (-2)) / (2 * self.alpha)
     
     def drift_coef(self, model, X, E, mask, t):
-        destination_X, destination_E, _ = model(X, E.unsqueeze(-1), t.unsqueeze(-1), mask)
+        destination_X, destination_E, _ = model(X, E, t.unsqueeze(-1), mask)
         sigma_square_t = self.sigma_square(t).unsqueeze(-1).unsqueeze(-1)
         v_t = self.v(t).unsqueeze(-1).unsqueeze(-1)
         u_t = self.u(t).unsqueeze(-1).unsqueeze(-1)
@@ -102,7 +102,7 @@ class DruM_SDE(nn.Module):
         time = time.to(x_T.device)
 
         x_t, e_t = self.q_sample(x_T, e_T, mask, time)
-        pred_x, pred_e, _ = model(x_t, e_t.unsqueeze(-1), time.unsqueeze(-1), mask)
+        pred_x, pred_e, _ = model(x_t, e_t, time.unsqueeze(-1), mask)
 
         gamma = self.gamma(time)
         loss_x = F.mse_loss(pred_x, x_T, reduction='none').mean(dim=(1, 2)) * gamma
